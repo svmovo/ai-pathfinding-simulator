@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>AI Pathfinding Simulator</title>
+<style>
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f1f5fb;color:#14213d}
+header{background:#14213d;color:#fff;padding:14px 28px}header small{color:#9fc2e8;letter-spacing:1px;font-size:11px}header h1{margin:2px 0 0;font-size:20px}
+.wrap{display:flex;gap:20px;padding:20px 28px;flex-wrap:wrap}
+.card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 8px #0001}
+.left{flex:1 1 520px}.right{flex:0 1 420px}
+label{display:block;font-size:11px;font-weight:700;color:#5b6b85;margin-bottom:4px;text-transform:uppercase}
+select{width:100%;padding:9px;border-radius:8px;border:1px solid #cdd5e3;background:#f7f8fc;font-weight:600}
+.row{display:flex;gap:14px;margin-bottom:12px}.row>div{flex:1}
+button{padding:8px 13px;border-radius:8px;border:1px solid #cdd5e3;background:#f7f8fc;font-weight:700;cursor:pointer}
+button.on{border-color:#2a8fb0;background:#e3f4fa}button.p{background:#1f5fbf;color:#fff}button.d{background:#14213d;color:#fff}
+#grid{display:grid;gap:8px;padding:10px;background:#eef2f9;border-radius:14px;width:max-content;margin:12px auto}
+.c{width:64px;height:64px;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;cursor:pointer;position:relative;color:#14213d}
+.c small{position:absolute;bottom:2px;right:5px;font-size:10px;color:#667}
+.w{background:#33496a}.s{background:#18a06e;color:#fff}.g{background:#dc5668;color:#fff}.k5{background:#ead9fa}.k9{background:#d6b3f3}
+.ex{background:#bfe9e1}.fr{outline:3px solid #2a8fb0}.path{background:#f7c75b!important}.cur{outline:3px solid #14213d}
+.stats{display:flex;gap:8px;margin:12px 0}.stats div{flex:1;text-align:center;border:1px solid #e1e6ef;border-radius:10px;padding:8px}.stats b{font-size:22px;display:block}.stats span{font-size:11px;color:#667}
+.msg{background:#e6f1fb;padding:9px 12px;border-radius:8px;margin:10px 0;font-size:14px}
+.box{background:#f4f6fb;border-left:3px solid #2a8fb0;padding:8px 12px;border-radius:6px;font-size:13px;margin:6px 0 12px;font-family:Consolas,monospace;word-break:break-all}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}td,th{padding:5px;border-bottom:1px solid #e1e6ef;text-align:center}
+.legend span{display:inline-block;margin-right:12px;font-size:12px}.legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:4px}
+</style></head><body>
+<header><small>AI COURSE PROJECT</small><h1>AI Pathfinding Simulator</h1></header>
+<div class="wrap">
+<div class="card left">
+<div class="row"><div><label>Scenario</label><select id="scn"></select></div>
+<div><label>Search algorithm</label><select id="alg"><option>BFS</option><option>DFS</option><option>UCS</option><option>Greedy</option><option>A*</option></select></div></div>
+<label>Edit the maze: select a tool, then click a cell</label>
+<div id="tools"></div>
+<div id="grid"></div>
+<div class="legend"><span><i style="background:#18a06e"></i>Start</span><span><i style="background:#dc5668"></i>Goal</span><span><i style="background:#33496a"></i>Wall</span><span><i style="background:#d6b3f3"></i>Cost 5/9</span><span><i style="background:#bfe9e1"></i>Expanded</span><span><i style="background:#f7c75b"></i>Final path</span></div>
+</div>
+<div class="card right">
+<h3 style="margin-top:0">Run the search</h3>
+<button class="p" id="play">▶ Play</button> <button class="d" id="step">Next step</button> <button id="reset">↺ Reset search</button> <button id="cmp">Compare all</button>
+<div class="msg" id="msg">Ready. Choose Step or Play.</div>
+<div class="stats"><div><b id="sE">0</b><span>Expanded</span></div><div><b id="sF">1</b><span>Frontier</span></div><div><b id="sM">-</b><span>Moves</span></div><div><b id="sC">-</b><span>Path cost</span></div></div>
+<b>What is happening?</b><div class="box" id="why" style="font-family:inherit"></div>
+<b>Frontier (next candidates)</b><div class="box" id="fr"></div>
+<div class="box" style="font-family:inherit"><b>Rules:</b> Move up/down/left/right only. Normal cells cost 1; purple cells cost 5 or 9. Start has no entry cost. BFS and DFS ignore weights when choosing the next cell; their final path cost still includes weights. Greedy uses h only, A* uses g+h (Manhattan distance).</div>
+<div id="cmpOut"></div>
+</div></div>
+<script>
+// ---------- Maze model ----------
+// cell values: 0 empty, 1 wall, 5 or 9 = entry cost
+const SC={
+ "1 · Starter maze":{n:5,start:[0,0],goal:[4,4],walls:[[1,1],[1,2],[2,3],[3,1],[4,3]],cost:{}},
+ "2 · Weighted detour":{n:5,start:[0,0],goal:[4,4],walls:[[1,3],[3,1]],cost:{"0,1":9,"1,1":9,"2,2":5,"3,3":5,"2,1":5,"4,2":9}},
+ "3 · Dead-end trap":{n:5,start:[0,0],goal:[4,4],walls:[[0,2],[1,2],[2,2],[3,2],[2,3],[2,4],[3,0]],cost:{}},
+ "4 · Open field":{n:5,start:[2,0],goal:[2,4],walls:[],cost:{"2,2":9,"1,2":5,"3,2":5}},
+ "5 · 7x7 big maze":{n:7,start:[0,0],goal:[6,6],walls:[[1,1],[1,2],[1,3],[1,5],[3,1],[3,2],[3,4],[3,5],[5,1],[5,3],[5,4],[5,5],[2,3],[4,3]],cost:{"0,4":5,"6,2":9}}
+};
+let N,grid,start,goal,tool="wall",st=null,timer=null;
+const $=id=>document.getElementById(id);
+const key=(r,c)=>r+","+c, hh=(r,c)=>Math.abs(r-goal[0])+Math.abs(c-goal[1]);
+function load(name){const s=SC[name];N=s.n;grid=Array.from({length:N},()=>Array(N).fill(0));
+ s.walls.forEach(([r,c])=>grid[r][c]=1);for(const k in s.cost){const [r,c]=k.split(",").map(Number);grid[r][c]=s.cost[k]}
+ start=[...s.start];goal=[...s.goal];resetSearch();}
+function cost(r,c){return grid[r][c]>1?grid[r][c]:1}
+// ---------- Search engine (step-by-step) ----------
+function init(){const alg=$("alg").value;
+ st={alg,frontier:[{r:start[0],c:start[1],g:0,parent:null,id:0}],closed:new Set(),seen:new Set([key(...start)]),expanded:0,done:false,found:false,cur:null,path:null,cnt:1,note:"Before the first step, the frontier contains only Start."};}
+function prio(n){const a=st.alg;if(a==="UCS")return n.g;if(a==="Greedy")return hh(n.r,n.c);if(a==="A*")return n.g+hh(n.r,n.c);return 0}
+function pick(){const f=st.frontier,a=st.alg;let i=0;
+ if(a==="BFS")i=0;else if(a==="DFS")i=f.length-1;
+ else{for(let j=1;j<f.length;j++){const p=prio(f[j]),q=prio(f[i]);if(p<q||(p===q&&f[j].id<f[i].id))i=j}}
+ return f.splice(i,1)[0];}
+function stepOnce(){
+ if(!st)init();if(st.done)return;
+ if(!st.frontier.length){st.done=true;st.found=false;st.note="Frontier is empty: no path to the goal.";return}
+ const n=pick();
+ if(st.closed.has(key(n.r,n.c))){st.note="Skipped "+key(n.r,n.c)+" (already expanded).";return}
+ st.closed.add(key(n.r,n.c));st.expanded++;st.cur=n;
+ if(n.r===goal[0]&&n.c===goal[1]){st.done=true;st.found=true;const p=[];for(let x=n;x;x=x.parent)p.unshift([x.r,x.c]);st.path=p;st.cost=n.g;
+  st.note="Goal reached! Path found with "+(p.length-1)+" moves and cost "+n.g+".";return}
+ let added=0;
+ for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){const r=n.r+dr,c=n.c+dc;
+  if(r<0||c<0||r>=N||c>=N||grid[r][c]===1||st.closed.has(key(r,c)))continue;
+  if(st.alg==="BFS"&&st.seen.has(key(r,c)))continue;
+  st.seen.add(key(r,c));st.frontier.push({r,c,g:n.g+cost(r,c),parent:n,id:st.cnt++});added++}
+ const how={BFS:"oldest cell first (queue)",DFS:"newest cell first (stack)",UCS:"lowest path cost g",Greedy:"lowest heuristic h",["A*"]:"lowest g+h"}[st.alg];
+ st.note="Expanded ("+n.r+","+n.c+") chosen by "+how+" ; added "+added+" new neighbour(s).";}
+function runAll(alg){const save=st,sa=$("alg").value;$("alg").value=alg;init();let guard=0;while(!st.done&&guard++<100000)stepOnce();const r=st;st=save;$("alg").value=sa;return r}
+// ---------- Rendering ----------
+function render(){
+ const g=$("grid");g.style.gridTemplateColumns=`repeat(${N},64px)`;g.innerHTML="";
+ const fr=new Set(st?st.frontier.map(n=>key(n.r,n.c)):[key(...start)]);
+ const path=new Set(st&&st.path?st.path.map(p=>key(...p)):[]);
+ for(let r=0;r<N;r++)for(let c=0;c<N;c++){const d=document.createElement("div");d.className="c";const k=key(r,c);const v=grid[r][c];
+  if(v===1)d.classList.add("w");else if(v===5)d.classList.add("k5");else if(v===9)d.classList.add("k9");
+  if(st&&st.closed.has(k))d.classList.add("ex");if(fr.has(k))d.classList.add("fr");if(path.has(k))d.classList.add("path");
+  if(st&&st.cur&&st.cur.r===r&&st.cur.c===c&&!st.done)d.classList.add("cur");
+  if(r===start[0]&&c===start[1]){d.classList.add("s");d.textContent="S"}else if(r===goal[0]&&c===goal[1]){d.classList.add("g");d.textContent="G"}
+  else if(v>1)d.textContent=v;
+  if(st&&st.closed.has(k)&&v!==1&&!(r===start[0]&&c===start[1])&&!(r===goal[0]&&c===goal[1]))d.innerHTML=(v>1?v:"")+"<small>h"+hh(r,c)+"</small>";
+  d.onclick=()=>edit(r,c);g.appendChild(d)}
+ $("sE").textContent=st?st.expanded:0;$("sF").textContent=st?st.frontier.length:1;
+ $("sM").textContent=st&&st.found?st.path.length-1:"-";$("sC").textContent=st&&st.found?st.cost:"-";
+ $("why").textContent=st?st.note:"Before the first step, the frontier contains only Start.";
+ $("fr").textContent=(st?st.frontier:[{r:start[0],c:start[1],g:0}]).map(n=>"("+n.r+","+n.c+")"+(st&&st.alg!=="BFS"&&st.alg!=="DFS"?" f="+prio(n):"")).join("  ")||"(empty)";
+ $("msg").textContent=st&&st.done?(st.found?"Done: path found.":"Done: no path."):"Ready. Choose Step or Play.";
+}
+function edit(r,c){stop();const isS=r===start[0]&&c===start[1],isG=r===goal[0]&&c===goal[1];
+ if(tool==="start"){if(grid[r][c]!==1&&!isG)start=[r,c]}
+ else if(tool==="goal"){if(grid[r][c]!==1&&!isS)goal=[r,c]}
+ else if(!isS&&!isG){grid[r][c]=tool==="wall"?1:tool==="erase"?0:Number(tool)}
+ resetSearch();}
+function resetSearch(){stop();st=null;$("cmpOut").innerHTML="";render()}
+function stop(){if(timer){clearInterval(timer);timer=null;$("play").textContent="▶ Play"}}
+$("step").onclick=()=>{stop();stepOnce();render()};
+$("play").onclick=()=>{if(timer){stop();return}if(st&&st.done)resetSearch();$("play").textContent="⏸ Pause";
+ timer=setInterval(()=>{stepOnce();render();if(st.done)stop()},350)};
+$("reset").onclick=resetSearch;$("alg").onchange=resetSearch;
+$("scn").onchange=()=>load($("scn").value);
+$("cmp").onclick=()=>{stop();let h="<table><tr><th>Algorithm</th><th>Found</th><th>Expanded</th><th>Moves</th><th>Cost</th></tr>";
+ let best=Infinity;const rs=["BFS","DFS","UCS","Greedy","A*"].map(a=>({a,r:runAll(a)}));rs.forEach(x=>{if(x.r.found)best=Math.min(best,x.r.cost)});
+ rs.forEach(({a,r})=>{h+=`<tr><td><b>${a}</b></td><td>${r.found?"yes":"no"}</td><td>${r.expanded}</td><td>${r.found?r.path.length-1:"-"}</td><td${r.found&&r.cost===best?' style="color:#18a06e;font-weight:800"':""}>${r.found?r.cost:"-"}</td></tr>`});
+ $("cmpOut").innerHTML="<h4>Compare all (green = optimal cost)</h4>"+h+"</table>";};
+// tools
+[["wall","▦ Wall"],["erase","□ Erase"],["start","S Start"],["goal","G Goal"],["5","5 Cost"],["9","9 Cost"]].forEach(([t,l])=>{const b=document.createElement("button");b.textContent=l;b.style.marginRight="6px";b.dataset.t=t;
+ b.onclick=()=>{tool=t;document.querySelectorAll("#tools button").forEach(x=>x.classList.toggle("on",x===b))};if(t==="wall")b.classList.add("on");$("tools").appendChild(b)});
+Object.keys(SC).forEach(k=>{const o=document.createElement("option");o.textContent=k;$("scn").appendChild(o)});
+load(Object.keys(SC)[0]);
+</script></body></html>
